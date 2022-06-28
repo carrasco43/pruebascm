@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+    tools{
+        maven 'm2_home'
+    }
+    
+    stages {
+        stage('CheckOut') {
+            steps {
+               cleanWs()
+               git branch: 'main', url: 'https://github.com/carrasco43/pruebamaven2.git'
+            }
+        }
+        
+        stage('test') {
+            steps {
+              sh "mvn test"
+            
+            }
+        }
+        stage('build') {
+            steps {
+              sh "mvn clean install "
+            
+            }
+        }
+        stage ('Scan and Build Jar File') {
+            steps {
+               withSonarQubeEnv(installationName: 'sonarqube') {
+                sh 'mvn clean install sonar:sonar'
+                }
+            
+            }
+        }
+        
+         stage("Quality gate") {
+            steps {
+                script{
+                    def qualityGateSonar = "NO CALCULATED"
+                    def failed = false
+                    def validaciones=0
+                while(qualityGateSonar=="NO CALCULATED" && validaciones<30){
+                    try{
+                        validaciones=validaciones+1
+                        println("Quality Gate= "+qualityGateSonar+" Validacion #"+validaciones)
+                        timeout(time: 30, unit: 'SECONDS') {
+                        qualityGateSonar = waitForQualityGate()
+                          if (qualityGateSonar.status != 'OK') {
+                              failed=true
+                        }else{
+                            sh "mkdir Jenkins"
+                             dir('target'){
+                              sh "ls"
+                              sh "mv pruebamaven-1.0-SNAPSHOT.jar ../Jenkins"
+                             }
+                             dir('Jenkins'){
+                               sh "ls"
+                             }
+                        }
+                        }
+                   }catch(Exception e){
+                      qualityGateSonar = "NO CALCULATED"
+                      }
+                   }
+                  
+                 
+                }
+            }
+        }
+        
+     
+      }     
+    
+}
+
